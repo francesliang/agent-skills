@@ -1,0 +1,15 @@
+## Expense Categories
+- Food/drinks
+- Gifts
+- Health/medical
+- Home
+- Transportation
+- Personal
+- Pets
+- Utilities
+- Travel
+- Mortgage
+- Weekly household
+- Clothing
+- Beauty
+- Investment property
