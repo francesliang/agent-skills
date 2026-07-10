@@ -38,6 +38,11 @@ When user uploads files:
 2. For transactions with "Income" type, further categorise them into sub-categories listed in [income_categories.md](income_categories.md).
 3. Perform the categorisation based on description
 4. If not sure, assign to "Other Expenses" or "Other Income"
+5. **Special Categorization & Transfer Rules**:
+   - Transfers/notes containing **"fun expense"** or **"weekly fun expense"** must be classified as **`Expense`** under the **`Weekly household`** category.
+   - Transfers/notes containing **"joint expense"** or **"weekly joint expense"** must be classified as **`Expense`** under the **`Weekly household`** category.
+   - Offset transfers/notes containing **"mortgage repayment"** or **"home loan repayment"** must be classified as **`Expense`** under the **`Mortgage`** category.
+   - Credit card payments (transfers from checking/savings to a credit card account) should be classified as **`Other`** (ignored/excluded) to prevent double counting of individual credit card transactions.
 
 ### Step 4: Write the results into a CSV file
 
