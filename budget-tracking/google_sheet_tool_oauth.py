@@ -1,5 +1,9 @@
 import os
 import sys
+import warnings
+warnings.filterwarnings('ignore')
+os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
+
 import pandas as pd
 import gspread
 from dotenv import load_dotenv
@@ -25,7 +29,7 @@ def get_user_creds():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file('client_secret.json', SCOPES)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(port=0, prompt='consent')
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
     return creds
@@ -54,8 +58,9 @@ def prepare_data_for_sheets(csv_path):
     # 3. Description (Index 2)
     df.iloc[:, 2] = df.iloc[:, 2].astype(str).str.strip()
     
-    # 4. Category (Index 3) - Formatted for dropdown matching
-    df.iloc[:, 3] = df.iloc[:, 3].astype(str).str.strip().str.title()
+    # 4. Category (Index 3) - Preserve the authoritative category wording.
+    # Categories must match expense_categories.md or income_categories.md exactly.
+    df.iloc[:, 3] = df.iloc[:, 3].astype(str).str.strip()
     
     return df.values.tolist()
 

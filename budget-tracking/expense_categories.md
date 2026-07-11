@@ -11,5 +11,6 @@
 - Mortgage
 - Weekly household
 - Clothing
-- Beauty
+- Hair/beauty
 - Investment property
+- Exercise

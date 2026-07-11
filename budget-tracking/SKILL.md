@@ -34,11 +34,13 @@ When user uploads files:
 
 ### Step 3: Categorize Transactions
 
-1. For transactions with "Expense" type, further categorise them into sub-categories listed in [expense_categories.md](expense_categories.md).
-2. For transactions with "Income" type, further categorise them into sub-categories listed in [income_categories.md](income_categories.md).
-3. Perform the categorisation based on description
-4. If not sure, assign to "Other Expenses" or "Other Income"
-5. **Special Categorization & Transfer Rules**:
+1. Before categorising transactions, read [expense_categories.md](expense_categories.md) and [income_categories.md](income_categories.md) and treat their list entries as the authoritative allowed values.
+2. For transactions with `Expense` type, assign exactly one category copied verbatim from [expense_categories.md](expense_categories.md).
+3. For transactions with `Income` type, assign exactly one category copied verbatim from [income_categories.md](income_categories.md).
+4. Category values must match the relevant list entry exactly, including capitalization, spaces, punctuation, and singular/plural wording. Do not rename, normalize, title-case, abbreviate, or invent categories such as `Other Expenses` or `Other Income` unless that exact wording appears in the relevant category file.
+5. Perform the categorisation based on the transaction description. If uncertain, use the closest applicable category from the relevant category file. For income, use `Other` as the fallback while that exact entry remains in [income_categories.md](income_categories.md). The expense category list currently has no generic fallback, so choose the closest listed expense category rather than creating a new value.
+6. Preserve the exact category wording when writing CSV files and when syncing values to Google Sheets.
+7. **Special Categorization & Transfer Rules**:
    - Transfers/notes containing **"fun expense"** or **"weekly fun expense"** must be classified as **`Expense`** under the **`Weekly household`** category.
    - Transfers/notes containing **"joint expense"** or **"weekly joint expense"** must be classified as **`Expense`** under the **`Weekly household`** category.
    - Offset transfers/notes containing **"mortgage repayment"** or **"home loan repayment"** must be classified as **`Expense`** under the **`Mortgage`** category.
