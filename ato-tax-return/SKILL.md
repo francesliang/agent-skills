@@ -66,8 +66,10 @@ Apply these rules:
 
 - Use one row for each distinct charge or levy.
 - Use the billing or levy period printed on the source document.
-- Use the explicit paid amount when available.
-- Do not assume that an amount due or account balance was paid.
+- Populate `Paid Amount` from the explicit paid amount when available.
+- Treat an explicit `Amount Payable`, `Nett Amount Payable`, `Total Due`, `Current Charges`, or equivalent billed amount as interchangeable with `Paid Amount` for this output.
+- If both a paid amount and a payable amount appear for the same charge, prefer the paid amount.
+- Exclude optional donations and unrelated carried-forward account balances.
 - Do not automatically treat a body-corporate special levy or capital charge as an immediately deductible expense; tell the user when one needs review.
 
 ### Rental property loan interest
