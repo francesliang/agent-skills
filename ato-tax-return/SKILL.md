@@ -1,6 +1,6 @@
 ---
 name: ato-tax-return
-description: Prepare Australian individual income-tax working papers by extracting rental-property expenses, ETF distributions, payslip leave hours, and loan interest from PDFs, CSVs, and spreadsheets. Use when processing end-of-financial-year documents or producing CSV summaries for an Australian tax return. Do not use it to lodge a return or make unsupported tax-deductibility decisions.
+description: Prepare Australian individual income-tax working papers by extracting rental-property expenses, ETF distributions, payslip leave hours, loan interest, and loan package fees from PDFs, CSVs, and spreadsheets. Use when processing end-of-financial-year documents or producing CSV summaries for an Australian tax return. Do not use it to lodge a return or make unsupported tax-deductibility decisions.
 ---
 
 # ATO Tax Return
@@ -72,16 +72,17 @@ Apply these rules:
 - Exclude optional donations and unrelated carried-forward account balances.
 - Do not automatically treat a body-corporate special levy or capital charge as an immediately deductible expense; tell the user when one needs review.
 
-### Rental property loan interest
+### Rental property loan interest and package fees
 
-Inspect rental-property home-loan transaction files when present. Extract only transactions whose details identify `Interest Charged`. Write `Output/rental-property-interest.csv` using exactly these fields:
+Inspect rental-property home-loan transaction files when present. Extract only transactions whose details identify `Interest Charged` or `Package fee`. Write `Output/rental-property-interest.csv` using exactly these fields:
 
 ```text
 Transaction Date,Account,Details,Debit
 ```
 
 - Preserve the values as represented in the source transaction file.
-- Exclude repayments, transfers, fees, principal, and other transaction types.
+- Exclude repayments, transfers, principal, other fees, and other transaction types.
+- Do not assume that a package fee is fully deductible. Tell the user when it may cover multiple loans or accounts, or relate partly to private or mixed-purpose borrowing.
 - Tell the user when the records indicate private use, refinancing, redraws, or mixed-purpose borrowing.
 
 ## ETF
