@@ -38,7 +38,13 @@ Then use `--two-speakers`. Labels must be exactly `Speaker1:` and `Speaker2:`, a
 
 ## Long scripts and retries
 
-The script groups prose into sections of at most 2,500 characters by default (`--chunk-chars`). It waits 15 seconds between new requests (`--pause`) and retries HTTP 429 and transient server errors with bounded backoff (`--retries`). Daily quota exhaustion may still require waiting until your project quota resets. Network errors stop the run; rerun to resume.
+The script groups prose into sections of at most 2,500 characters by default (`--chunk-chars`). It waits 15 seconds between new requests (`--pause`) and retries HTTP 429 and transient server errors up to six times per section (`--retries`). Backoff starts at 30 seconds (`--retry-delay`) and doubles up to 120 seconds (`--max-retry-delay`). It respects numeric `Retry-After` and Google `RetryInfo` hints; if a server-requested wait exceeds the maximum, it stops so you can resume later instead of retrying too early. Quota metric, ID and limit value are reported when present, without logging raw error bodies or credentials. A 429 without those details does not establish daily quota exhaustion. Daily limits may require waiting until the project quota resets. Network errors stop the run; rerun to resume.
+
+To resume with a longer bounded retry window, for example:
+
+```sh
+python3 scripts/gemini_tts.py 2026-11-09/script.md --two-speakers --retries 8 --retry-delay 30 --max-retry-delay 300
+```
 
 Completed sections are stored in `.gemini-tts-cache/` beside the output. Rerunning the same text and voices reuses them without another API request. Cache filenames include a hash of the model and request configuration. Keep the cache until generation succeeds. Audio files/cache can be large and are not automatically published to GitHub. Existing output files are protected unless `--overwrite` is supplied.
 

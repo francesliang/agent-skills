@@ -107,7 +107,36 @@ def request_body(text, args):
         'responseModalities': ['AUDIO'], 'speechConfig': speech}}
 
 
-def generate(body, key, retries, timeout):
+def quota_details(exc, key):
+    """Extract only quota identifiers and retry hints, never raw error bodies."""
+    details, delays = [], []
+    try:
+        retry_after = exc.headers.get('Retry-After', '') if exc.headers else ''
+        if re.fullmatch(r'\d+(?:\.\d+)?', retry_after):
+            delays.append(float(retry_after))
+        error = json.loads(exc.read()).get('error', {})
+        for entry in error.get('details', []):
+            if entry.get('@type', '').endswith('/google.rpc.RetryInfo'):
+                match = re.fullmatch(r'(\d+(?:\.\d+)?)s', str(entry.get('retryDelay', '')))
+                if match:
+                    delays.append(float(match[1]))
+            if entry.get('@type', '').endswith('/google.rpc.QuotaFailure'):
+                for violation in entry.get('violations', []):
+                    fields = []
+                    for name in ('quotaMetric', 'quotaId', 'quotaValue'):
+                        value = violation.get(name)
+                        if isinstance(value, (str, int, float)):
+                            safe = str(value).replace(key, '[redacted]') if key else str(value)
+                            safe = re.sub(r'[^\w./:\-\[\] ]', '?', safe)[:200]
+                            fields.append(f'{name}={safe}')
+                    if fields:
+                        details.append(', '.join(fields))
+    except (ValueError, AttributeError, TypeError, OSError):
+        pass
+    return '; '.join(details), max(delays, default=0)
+
+
+def generate(body, key, retries, timeout, retry_delay=30, max_retry_delay=120):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent'
     for attempt in range(retries + 1):
         request = urllib.request.Request(url, data=json.dumps(body).encode(), headers={
@@ -117,15 +146,21 @@ def generate(body, key, retries, timeout):
                 result = json.load(response)
             break
         except urllib.error.HTTPError as exc:
+            quota, server_delay = quota_details(exc, key)
+            detail = {400: 'Invalid request or voice configuration.',
+                      403: 'Check your API key, project access and region.',
+                      404: 'The configured TTS model is unavailable.',
+                      429: 'Rate or quota limit reached; the exact limit is unknown unless listed below.'}
+            message = f'Gemini HTTP {exc.code}. ' + detail.get(exc.code, 'Request failed.')
+            if quota:
+                message += ' ' + quota
             if exc.code not in (429, 500, 502, 503, 504) or attempt == retries:
-                # Avoid printing server bodies or request details containing credentials.
-                detail = {400: 'Invalid request or voice configuration.',
-                          403: 'Check your API key, project access and region.',
-                          404: 'The configured TTS model is unavailable.',
-                          429: 'Quota exhausted. Wait and resume; daily quotas may need a later retry.'}
-                raise RuntimeError(f'Gemini HTTP {exc.code}. ' + detail.get(exc.code, 'Request failed.')) from None
-            delay = min(120, 15 * 2 ** attempt)
-            print(f'HTTP {exc.code}; retrying in {delay}s...', file=sys.stderr)
+                raise RuntimeError(message + ' Completed sections remain cached; rerun to resume.') from None
+            if server_delay > max_retry_delay:
+                raise RuntimeError(message + f' Server requests a {server_delay:g}s wait, beyond '
+                                   f'--max-retry-delay={max_retry_delay:g}. Rerun later to resume.') from None
+            delay = max(server_delay, min(max_retry_delay, retry_delay * 2 ** min(attempt, 30)))
+            print(f'{message} Retrying {attempt + 1}/{retries} in {delay:g}s...', file=sys.stderr)
             time.sleep(delay)
     candidates = result.get('candidates', [])
     if not candidates or candidates[0].get('finishReason') != 'STOP':
@@ -193,13 +228,16 @@ def main():
     parser.add_argument('--voice2', default='Puck', help='Speaker2 voice (default: Puck)')
     parser.add_argument('--chunk-chars', type=int, default=2500)
     parser.add_argument('--pause', type=float, default=15, help='Seconds between uncached requests')
-    parser.add_argument('--retries', type=int, default=3)
+    parser.add_argument('--retries', type=int, default=6, help='Retries per section after HTTP 429 or transient server errors (default: 6)')
+    parser.add_argument('--retry-delay', type=float, default=30, help='Initial retry backoff in seconds (default: 30)')
+    parser.add_argument('--max-retry-delay', type=float, default=120, help='Maximum wait per retry; longer server hints stop for a later resume (default: 120)')
     parser.add_argument('--timeout', type=float, default=240)
     parser.add_argument('--dry-run', action='store_true', help='Prepare and report sections without API calls')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
-    if args.chunk_chars < 100 or args.pause < 0 or args.retries < 0 or args.timeout <= 0:
-        parser.error('Use chunk-chars >= 100, pause/retries >= 0 and timeout > 0.')
+    if (args.chunk_chars < 100 or args.pause < 0 or args.retries < 0 or args.timeout <= 0
+            or not 0 < args.retry_delay <= args.max_retry_delay < float('inf')):
+        parser.error('Use chunk-chars >= 100, pause/retries >= 0, timeout > 0, and 0 < retry-delay <= max-retry-delay.')
     output = args.output or args.script.with_name(audio_file_name)
     if output.name != audio_file_name:
         parser.error(f'Output filename must be {audio_file_name}.')
@@ -238,7 +276,7 @@ def main():
             if requested:
                 time.sleep(args.pause)
             print(f'Section {i}/{len(chunks)}: generating...', flush=True)
-            pcm = generate(body, key, args.retries, args.timeout)
+            pcm = generate(body, key, args.retries, args.timeout, args.retry_delay, args.max_retry_delay)
             save_pcm(cached, pcm)
             requested = True
         all_pcm.append(pcm)

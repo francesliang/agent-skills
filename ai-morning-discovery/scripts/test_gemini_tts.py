@@ -5,12 +5,54 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 import gemini_tts as tts
 
 
 class TtsTests(unittest.TestCase):
+    @staticmethod
+    def http_error(code=429, details=None, headers=None):
+        body = {'error': {'message': 'private server message', 'details': details or []}}
+        return urllib.error.HTTPError('https://example.invalid', code, 'error', headers or {},
+                                      io.BytesIO(json.dumps(body).encode()))
+
+    def test_retry_respects_server_hint_then_succeeds(self):
+        error = self.http_error(details=[{'@type': 'type.googleapis.com/google.rpc.RetryInfo',
+                                          'retryDelay': '45.5s'}], headers={'Retry-After': '40'})
+        result = {'candidates': [{'finishReason': 'STOP', 'content': {'parts': [
+            {'inlineData': {'mimeType': 'audio/L16;rate=24000', 'data': 'AQA='}}]}}]}
+        with patch('urllib.request.urlopen', side_effect=[error, io.BytesIO(json.dumps(result).encode())]), \
+                patch.object(tts.time, 'sleep') as sleep:
+            self.assertEqual(tts.generate({}, 'secret', 1, 1), b'\x01\x00')
+        sleep.assert_called_once_with(45.5)
+
+    def test_exhausted_retries_report_quota_without_secrets(self):
+        details = [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [
+            {'quotaMetric': 'requests', 'quotaId': 'RequestsPerDay-secret', 'quotaValue': '15'}]}]
+        errors = [self.http_error(details=details) for _ in range(3)]
+        with patch('urllib.request.urlopen', side_effect=errors) as request, \
+                patch.object(tts.time, 'sleep') as sleep, patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            with self.assertRaises(RuntimeError) as raised:
+                tts.generate({}, 'secret', 2, 1, retry_delay=10, max_retry_delay=15)
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [10, 15])
+        output = str(raised.exception) + stderr.getvalue()
+        self.assertIn('quotaValue=15', output)
+        self.assertIn('RequestsPerDay-[redacted]', output)
+        self.assertNotIn('secret', output)
+        self.assertNotIn('private server message', output)
+
+    def test_long_server_wait_and_nonretryable_error_stop(self):
+        for error in [self.http_error(headers={'Retry-After': '3600'}), self.http_error(code=403)]:
+            with self.subTest(code=error.code), patch('urllib.request.urlopen', side_effect=error) as request, \
+                    patch.object(tts.time, 'sleep') as sleep:
+                with self.assertRaises(RuntimeError):
+                    tts.generate({}, 'secret', 6, 1)
+                request.assert_called_once()
+                sleep.assert_not_called()
+
     def test_split_preserves_dialogue_voice_and_words(self):
         text = 'Speaker1: ' + 'Hello world. ' * 50 + '\nSpeaker2: Goodbye.'
         chunks = tts.make_chunks(text, True, 100)
