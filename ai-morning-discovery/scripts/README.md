@@ -1,0 +1,51 @@
+# Gemini Markdown to audio
+
+`gemini_tts.py` requires Python 3.10+ and no third-party packages. It sends cleaned text to Gemini's GenerateContent TTS endpoint and encodes the returned audio as mono AAC in `podcast.m4a` (24 kHz, 64 kbps). M4A encoding uses the built-in `afconvert` on macOS, or `ffmpeg` on other systems. No browser, file-upload service, or separate download step is needed.
+
+## Setup
+
+Create a key in [Google AI Studio](https://aistudio.google.com/apikey) for a **free-tier project**. Keep the key out of scripts and Git. The default model is `gemini-2.5-flash-preview-tts`, which Google's [pricing page](https://ai.google.dev/gemini-api/docs/pricing) currently lists with free input/output on the free tier. Quotas, availability and pricing can change. A billing-enabled project's key can incur charges: the API has no per-request “free only” switch. This script never falls back to another model. Free-tier content may be used to improve Google's products; consult the linked terms before sending private content.
+
+On macOS/zsh, enter your key without putting it in shell history:
+
+```zsh
+read -s 'GEMINI_API_KEY?Gemini API key: '
+export GEMINI_API_KEY
+```
+
+From this project directory:
+
+```sh
+# Inspect splitting without a key or network access.
+python3 scripts/gemini_tts.py 2026-11-09/script.md --dry-run
+
+# Read the existing monologue with a single voice.
+python3 scripts/gemini_tts.py 2026-11-09/script.md
+
+# Alternate Kore and Puck between paragraphs, preserving the prose.
+python3 scripts/gemini_tts.py 2026-11-09/script.md --two-speakers
+```
+
+The default output is `podcast.m4a` next to the input file. For an actual two-host conversation, write speaker-labelled text:
+
+```text
+Speaker1: Welcome to Morning Discovery.
+Speaker2: Today we are covering the latest research.
+Speaker1: Let's begin with the first story.
+```
+
+Then use `--two-speakers`. Labels must be exactly `Speaker1:` and `Speaker2:`, at the start of a line. In labelled mode all prose must follow a speaker label; the script preserves the assigned voice across section boundaries. In unlabelled mode it alternates at blank-line paragraph breaks. It does not rewrite a monologue into a dialogue. `--voice Kore --voice2 Puck` changes the voices; see Google's [TTS documentation](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) for available voice names.
+
+## Long scripts and retries
+
+The script groups prose into sections of at most 2,500 characters by default (`--chunk-chars`). It waits 15 seconds between new requests (`--pause`) and retries HTTP 429 and transient server errors with bounded backoff (`--retries`). Daily quota exhaustion may still require waiting until your project quota resets. Network errors stop the run; rerun to resume.
+
+Completed sections are stored in `.gemini-tts-cache/` beside the output. Rerunning the same text and voices reuses them without another API request. Cache filenames include a hash of the model and request configuration. Keep the cache until generation succeeds. Audio files/cache can be large and are not automatically published to GitHub. Existing output files are protected unless `--overwrite` is supplied.
+
+Generation is prompted to read the text verbatim. Generative TTS can still mispronounce, omit, or vary speech; listen to the result before publishing. Independent sections may vary in cadence. Fenced code and images are omitted; links retain their visible label. Use prose rather than Markdown tables for spoken input. The only final audio file is `podcast.m4a`, next to the input. Use `-o /another/folder/podcast.m4a` to choose a different directory; the filename is fixed. Temporary WAV data is removed after encoding, including on conversion errors. Resumable cache entries use raw `.pcm` files. Legacy WAV cache entries are no longer used. Previously generated WAV files are not deleted automatically.
+
+Run offline checks:
+
+```sh
+python3 -m unittest discover -s scripts -p 'test_*.py'
+```
