@@ -1,6 +1,7 @@
 """Offline checks: speaker assignment, audio decoding and resumable assembly."""
 import base64
 import argparse
+import array
 import io
 import json
 from pathlib import Path
@@ -13,6 +14,38 @@ import gemini_tts as tts
 
 
 class TtsTests(unittest.TestCase):
+    def test_intro_has_music_lead_ducks_and_preserves_speech_tail(self):
+        speech = array.array('h', [10000]) * (12 * tts.RATE)
+        music = array.array('h', [10000]) * (9 * tts.RATE)
+        with patch.object(tts.sys, 'byteorder', 'little'):
+            mixed = array.array('h', tts.mix_intro(speech.tobytes(), music.tobytes()))
+        self.assertEqual(len(mixed), 14 * tts.RATE)
+        self.assertAlmostEqual(mixed[tts.RATE], 4500, delta=1)
+        self.assertAlmostEqual(mixed[3 * tts.RATE], 9700, delta=1)
+        self.assertEqual(mixed[10 * tts.RATE:], speech[8 * tts.RATE:])
+        loud = array.array('h', [32767]) * (9 * tts.RATE)
+        with patch.object(tts.sys, 'byteorder', 'little'):
+            mixed = array.array('h', tts.mix_intro(loud.tobytes(), loud.tobytes()))
+        self.assertLessEqual(max(mixed), 32767)
+        self.assertLess(mixed[3 * tts.RATE], 32767)
+
+    def test_duration_limit_preserves_existing_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'script.md'
+            output = Path(folder) / 'podcast.m4a'
+            source.write_text('Hello.')
+            output.write_bytes(b'previous episode')
+            argv = ['gemini_tts.py', str(source), '--no-intro-music', '--overwrite']
+            with patch('sys.argv', argv), patch.dict('os.environ', {'GEMINI_API_KEY': 'test'}), \
+                    patch.object(tts, 'find_encoder', return_value='afconvert'), \
+                    patch.object(tts, 'RATE', 10), patch.object(tts, 'MAX_SECONDS', 900), \
+                    patch.object(tts, 'generate', return_value=b'\0\0' * 9001), \
+                    patch.object(tts, 'save_m4a') as encode:
+                with self.assertRaisesRegex(ValueError, 'exceeding'):
+                    tts.main()
+                encode.assert_not_called()
+                self.assertEqual(output.read_bytes(), b'previous episode')
+
     def test_host_voices_preserve_labels_and_verbatim_transcript(self):
         transcript = "Speaker1: I'm Maya.\n\nSpeaker2: And I'm Jax."
         args = argparse.Namespace(two_speakers=True, voice=tts.DEFAULT_VOICE, voice2=tts.DEFAULT_VOICE2)
@@ -96,7 +129,7 @@ class TtsTests(unittest.TestCase):
             source = Path(folder) / 'script.md'
             output = Path(folder) / 'podcast.m4a'
             source.write_text('Hello world. ' * 40)
-            argv = ['gemini_tts.py', str(source), '--chunk-chars', '100', '--pause', '0']
+            argv = ['gemini_tts.py', str(source), '--chunk-chars', '100', '--pause', '0', '--no-intro-music']
             pcm = b'\x01\x00' * 100
             with patch('sys.argv', argv), patch.dict('os.environ', {'GEMINI_API_KEY': 'test'}), \
                     patch.object(tts, 'find_encoder', return_value='afconvert'), \

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read Markdown aloud with Gemini TTS and save podcast.m4a. Python 3.10+, no packages."""
 import argparse
+import array
 import base64
 import binascii
 import hashlib
@@ -22,6 +23,10 @@ RATE = 24000
 audio_file_name = "podcast.m4a"
 DEFAULT_VOICE = 'Callirrhoe'
 DEFAULT_VOICE2 = 'Puck'
+DEFAULT_INTRO_MUSIC = Path('intro-music.m4a')
+INTRO_LEAD = 2
+INTRO_LENGTH = 9
+MAX_SECONDS = 900
 
 
 def clean_markdown(text):
@@ -197,6 +202,57 @@ def find_encoder():
     raise RuntimeError('M4A encoding requires afconvert on macOS or ffmpeg on PATH.')
 
 
+def load_intro_music(path, encoder):
+    """Decode even extensionless music to the same mono PCM format as speech."""
+    if not path.is_file():
+        raise ValueError(f'Intro music not found: {path}. Use --intro-music PATH or --no-intro-music.')
+    with tempfile.TemporaryDirectory() as folder:
+        decoded = Path(folder) / 'intro.wav'
+        if encoder == 'afconvert':
+            command = ['afconvert', '-f', 'WAVE', '-d', f'LEI16@{RATE}', '-c', '1',
+                       str(path), str(decoded)]
+        else:
+            command = ['ffmpeg', '-nostdin', '-v', 'error', '-i', str(path),
+                       '-t', str(INTRO_LENGTH), '-ar', str(RATE), '-ac', '1',
+                       '-c:a', 'pcm_s16le', str(decoded)]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError('Intro music decoding failed: ' + result.stderr.strip())
+        with wave.open(str(decoded), 'rb') as wav:
+            if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, RATE):
+                raise ValueError('Intro decoder did not produce mono 16-bit 24 kHz PCM.')
+            pcm = wav.readframes(RATE * INTRO_LENGTH)
+        if not pcm:
+            raise ValueError('Intro music contains no audio.')
+        return pcm
+
+
+def mix_intro(speech_pcm, music_pcm):
+    """Two-second music lead, duck under speech, then fade out by nine seconds."""
+    if not speech_pcm or len(speech_pcm) % 2 or not music_pcm or len(music_pcm) % 2:
+        raise ValueError('Mixing requires nonempty 16-bit PCM speech and music.')
+    speech, music = array.array('h'), array.array('h')
+    speech.frombytes(speech_pcm)
+    music.frombytes(music_pcm[:INTRO_LENGTH * RATE * 2])
+    if sys.byteorder != 'little':
+        speech.byteswap()
+        music.byteswap()
+    lead = INTRO_LEAD * RATE
+    result = array.array('h', [0]) * max(lead + len(speech), len(music))
+    result[lead:lead + len(speech)] = speech
+    fade_frames = min(2 * RATE, len(music))
+    for i, sample in enumerate(music):
+        fade = min(1.0, (i + 1) / (0.05 * RATE), (len(music) - 1 - i) / fade_frames)
+        # Lower the bed before the first spoken word; reserve headroom while it plays.
+        duck = max(0.0, min(1.0, (lead - i) / (0.3 * RATE)))
+        music_gain = (0.12 + 0.33 * duck) * fade
+        voice_gain = 1.0 - 0.15 * fade
+        result[i] = max(-32768, min(32767, round(result[i] * voice_gain + sample * music_gain)))
+    if sys.byteorder != 'little':
+        result.byteswap()
+    return result.tobytes()
+
+
 def save_m4a(path, pcm, encoder):
     # Only the final M4A persists; intermediate audio is removed on success or error.
     with tempfile.TemporaryDirectory(dir=path.parent) as folder:
@@ -241,6 +297,10 @@ def main():
     parser.add_argument('--retry-delay', type=float, default=30, help='Initial retry backoff in seconds (default: 30)')
     parser.add_argument('--max-retry-delay', type=float, default=120, help='Maximum wait per retry; longer server hints stop for a later resume (default: 120)')
     parser.add_argument('--timeout', type=float, default=240)
+    music = parser.add_mutually_exclusive_group()
+    music.add_argument('--intro-music', type=Path, default=DEFAULT_INTRO_MUSIC,
+                       help=f'Opening music file (default: {DEFAULT_INTRO_MUSIC})')
+    music.add_argument('--no-intro-music', action='store_true', help='Generate speech only')
     parser.add_argument('--dry-run', action='store_true', help='Prepare and report sections without API calls')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
@@ -260,10 +320,13 @@ def main():
     if args.dry_run:
         for i, chunk in enumerate(chunks, 1):
             print(f'  Section {i}: {len(chunk)} characters')
+        print('Intro: disabled' if args.no_intro_music else
+              f'Intro: {args.intro_music}; {INTRO_LEAD}s lead; fades out by {INTRO_LENGTH}s')
         return
     if output.exists() and not args.overwrite:
         parser.error(f'Output exists: {output}. Use --overwrite to replace it.')
     encoder = find_encoder()
+    intro_pcm = None if args.no_intro_music else load_intro_music(args.intro_music, encoder)
     key = os.environ.get('GEMINI_API_KEY')
     if not key:
         parser.error('Set GEMINI_API_KEY using a Google AI Studio free-tier project key.')
@@ -289,8 +352,14 @@ def main():
             save_pcm(cached, pcm)
             requested = True
         all_pcm.append(pcm)
-    save_m4a(output, b''.join(all_pcm), encoder)
-    seconds = sum(map(len, all_pcm)) / (RATE * 2)
+    pcm = b''.join(all_pcm)
+    if intro_pcm is not None:
+        pcm = mix_intro(pcm, intro_pcm)
+    seconds = len(pcm) / (RATE * 2)
+    if seconds > MAX_SECONDS:
+        raise ValueError(f'Final audio would be {seconds:.2f}s, exceeding the 900s limit. '
+                         'Shorten the script and rerun; cached sections are retained.')
+    save_m4a(output, pcm, encoder)
     print(f'Saved {output.resolve()} ({seconds / 60:.1f} minutes)')
 
 

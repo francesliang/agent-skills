@@ -36,6 +36,14 @@ Speaker1: Let's begin with the first story.
 
 Then use `--two-speakers`. Labels must be exactly `Speaker1:` and `Speaker2:`, at the start of a line. In labelled mode all prose must follow a speaker label; the script preserves the assigned voice across section boundaries. Defaults are **Maya / Speaker1 / Callirrhoe** (easy-going, warm and curious) and **Jax / Speaker2 / Puck** (funny, playful and quick-witted). The TTS prompt reinforces their delivery while reading the dialogue verbatim; write their personalities and the recurring intro into the script using `SKILL.md`. In unlabelled mode it alternates at blank-line paragraph breaks. It does not rewrite a monologue into a dialogue. `--voice Callirrhoe --voice2 Puck` explicitly selects the defaults; these flags also accept other voices. See Google's [voice list and samples](https://firebase.google.com/docs/ai-logic/generate-speech?api=vertex#response-voices-list).
 
+## Intro music
+
+By default, the final mix uses `intro-music.m4a` in the command's working directory. Run from the publication checkout root where this track is stored. Music plays alone for two seconds, ducks beneath the first spoken words, and fades out by nine seconds. The speech keeps its natural pace. The final `podcast.m4a` includes the music; the 15-minute limit includes the two-second lead-in. Overlong output stops before replacing an existing episode.
+
+Use `--intro-music /absolute/path/to/music.m4a` to choose a different track, or `--no-intro-music` for speech only. Music is decoded and checked before Gemini requests using the existing macOS `afconvert` or FFmpeg dependency, then mixed locally with Python's standard library. An absent or invalid configured track stops the run. Dry runs show the mixing settings without decoding music or calling Gemini.
+
+Music is applied after assembling speech, so changing the track or remixing it reuses the same speech caches. Temporary decoded audio is removed automatically. Keep the source music outside the episode folder; publish only the finished `podcast.m4a`.
+
 ## Long scripts and retries
 
 The script groups prose into sections of at most 2,500 characters by default (`--chunk-chars`). It waits 15 seconds between new requests (`--pause`) and retries HTTP 429 and transient server errors up to six times per section (`--retries`). Backoff starts at 30 seconds (`--retry-delay`) and doubles up to 120 seconds (`--max-retry-delay`). It respects numeric `Retry-After` and Google `RetryInfo` hints; if a server-requested wait exceeds the maximum, it stops so you can resume later instead of retrying too early. Quota metric, ID and limit value are reported when present, without logging raw error bodies or credentials. A 429 without those details does not establish daily quota exhaustion. Daily limits may require waiting until the project quota resets. Network errors stop the run; rerun to resume.
