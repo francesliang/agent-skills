@@ -24,7 +24,7 @@ audio_file_name = "podcast.m4a"
 DEFAULT_VOICE = 'Callirrhoe'
 DEFAULT_VOICE2 = 'Puck'
 DEFAULT_INTRO_MUSIC = Path('intro-music.m4a')
-INTRO_LEAD = 2
+INTRO_LEAD = 5
 INTRO_LENGTH = 9
 MAX_SECONDS = 900
 
@@ -228,7 +228,7 @@ def load_intro_music(path, encoder):
 
 
 def mix_intro(speech_pcm, music_pcm):
-    """Two-second music lead, duck under speech, then fade out by nine seconds."""
+    """Five-second music lead, duck under speech, then fade out by nine seconds."""
     if not speech_pcm or len(speech_pcm) % 2 or not music_pcm or len(music_pcm) % 2:
         raise ValueError('Mixing requires nonempty 16-bit PCM speech and music.')
     speech, music = array.array('h'), array.array('h')

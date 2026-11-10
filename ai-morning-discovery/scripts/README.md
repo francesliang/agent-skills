@@ -38,7 +38,7 @@ Then use `--two-speakers`. Labels must be exactly `Speaker1:` and `Speaker2:`, a
 
 ## Intro music
 
-By default, the final mix uses `intro-music.m4a` in the command's working directory. Run from the publication checkout root where this track is stored. Music plays alone for two seconds, ducks beneath the first spoken words, and fades out by nine seconds. The speech keeps its natural pace. The final `podcast.m4a` includes the music; the 15-minute limit includes the two-second lead-in. Overlong output stops before replacing an existing episode.
+By default, the final mix uses `intro-music.m4a` in the command's working directory. Run from the publication checkout root where this track is stored. Music plays alone for five seconds, ducks beneath the first spoken words, and fades out by nine seconds. The speech keeps its natural pace. The final `podcast.m4a` includes the music; the 15-minute limit includes the five-second lead-in. Overlong output stops before replacing an existing episode.
 
 Use `--intro-music /absolute/path/to/music.m4a` to choose a different track, or `--no-intro-music` for speech only. Music is decoded and checked before Gemini requests using the existing macOS `afconvert` or FFmpeg dependency, then mixed locally with Python's standard library. An absent or invalid configured track stops the run. Dry runs show the mixing settings without decoding music or calling Gemini.
 

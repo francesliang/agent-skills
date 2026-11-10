@@ -19,15 +19,15 @@ class TtsTests(unittest.TestCase):
         music = array.array('h', [10000]) * (9 * tts.RATE)
         with patch.object(tts.sys, 'byteorder', 'little'):
             mixed = array.array('h', tts.mix_intro(speech.tobytes(), music.tobytes()))
-        self.assertEqual(len(mixed), 14 * tts.RATE)
+        self.assertEqual(len(mixed), 17 * tts.RATE)
         self.assertAlmostEqual(mixed[tts.RATE], 4500, delta=1)
-        self.assertAlmostEqual(mixed[3 * tts.RATE], 9700, delta=1)
-        self.assertEqual(mixed[10 * tts.RATE:], speech[8 * tts.RATE:])
+        self.assertAlmostEqual(mixed[6 * tts.RATE], 9700, delta=1)
+        self.assertEqual(mixed[10 * tts.RATE:], speech[5 * tts.RATE:])
         loud = array.array('h', [32767]) * (9 * tts.RATE)
         with patch.object(tts.sys, 'byteorder', 'little'):
             mixed = array.array('h', tts.mix_intro(loud.tobytes(), loud.tobytes()))
         self.assertLessEqual(max(mixed), 32767)
-        self.assertLess(mixed[3 * tts.RATE], 32767)
+        self.assertLess(mixed[6 * tts.RATE], 32767)
 
     def test_duration_limit_preserves_existing_output(self):
         with tempfile.TemporaryDirectory() as folder:
