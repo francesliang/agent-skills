@@ -22,19 +22,19 @@ python3 scripts/gemini_tts.py 2026-11-09/script.md --dry-run
 # Read the existing monologue with a single voice.
 python3 scripts/gemini_tts.py 2026-11-09/script.md
 
-# Alternate Kore and Puck between paragraphs, preserving the prose.
+# Use Maya (Callirrhoe) and Jax (Puck), preserving the prose.
 python3 scripts/gemini_tts.py 2026-11-09/script.md --two-speakers
 ```
 
 The default output is `podcast.m4a` next to the input file. For an actual two-host conversation, write speaker-labelled text:
 
 ```text
-Speaker1: Welcome to Morning Discovery.
-Speaker2: Today we are covering the latest research.
+Speaker1: Welcome to Morning Discovery. I'm Maya.
+Speaker2: And I'm Jax. Big ideas, useful context, and a fighting chance of closing a browser tab.
 Speaker1: Let's begin with the first story.
 ```
 
-Then use `--two-speakers`. Labels must be exactly `Speaker1:` and `Speaker2:`, at the start of a line. In labelled mode all prose must follow a speaker label; the script preserves the assigned voice across section boundaries. In unlabelled mode it alternates at blank-line paragraph breaks. It does not rewrite a monologue into a dialogue. `--voice Kore --voice2 Puck` changes the voices; see Google's [TTS documentation](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) for available voice names.
+Then use `--two-speakers`. Labels must be exactly `Speaker1:` and `Speaker2:`, at the start of a line. In labelled mode all prose must follow a speaker label; the script preserves the assigned voice across section boundaries. Defaults are **Maya / Speaker1 / Callirrhoe** (easy-going, warm and curious) and **Jax / Speaker2 / Puck** (funny, playful and quick-witted). The TTS prompt reinforces their delivery while reading the dialogue verbatim; write their personalities and the recurring intro into the script using `SKILL.md`. In unlabelled mode it alternates at blank-line paragraph breaks. It does not rewrite a monologue into a dialogue. `--voice Callirrhoe --voice2 Puck` explicitly selects the defaults; these flags also accept other voices. See Google's [voice list and samples](https://firebase.google.com/docs/ai-logic/generate-speech?api=vertex#response-voices-list).
 
 ## Long scripts and retries
 
@@ -46,7 +46,7 @@ To resume with a longer bounded retry window, for example:
 python3 scripts/gemini_tts.py 2026-11-09/script.md --two-speakers --retries 8 --retry-delay 30 --max-retry-delay 300
 ```
 
-Completed sections are stored in `.gemini-tts-cache/` beside the output. Rerunning the same text and voices reuses them without another API request. Cache filenames include a hash of the model and request configuration. Keep the cache until generation succeeds. Audio files/cache can be large and are not automatically published to GitHub. Existing output files are protected unless `--overwrite` is supplied.
+Completed sections are stored in `.gemini-tts-cache/` beside the output. Rerunning the same text, voices and delivery instructions reuses them without another API request. Cache filenames include a hash of the model and request configuration, so changing voices or the delivery prompt generates new sections rather than mixing different host performances. Previous caches remain intact. Keep the cache until generation succeeds. Audio files/cache can be large and are not automatically published to GitHub. Existing output files are protected unless `--overwrite` is supplied.
 
 Generation is prompted to read the text verbatim. Generative TTS can still mispronounce, omit, or vary speech; listen to the result before publishing. Independent sections may vary in cadence. Fenced code and images are omitted; links retain their visible label. Use prose rather than Markdown tables for spoken input. The only final audio file is `podcast.m4a`, next to the input. Use `-o /another/folder/podcast.m4a` to choose a different directory; the filename is fixed. Temporary WAV data is removed after encoding, including on conversion errors. Resumable cache entries use raw `.pcm` files. Legacy WAV cache entries are no longer used. Previously generated WAV files are not deleted automatically.
 

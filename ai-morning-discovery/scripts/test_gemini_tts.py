@@ -1,5 +1,6 @@
 """Offline checks: speaker assignment, audio decoding and resumable assembly."""
 import base64
+import argparse
 import io
 import json
 from pathlib import Path
@@ -12,6 +13,22 @@ import gemini_tts as tts
 
 
 class TtsTests(unittest.TestCase):
+    def test_host_voices_preserve_labels_and_verbatim_transcript(self):
+        transcript = "Speaker1: I'm Maya.\n\nSpeaker2: And I'm Jax."
+        args = argparse.Namespace(two_speakers=True, voice=tts.DEFAULT_VOICE, voice2=tts.DEFAULT_VOICE2)
+        body = tts.request_body(transcript, args)
+        voices = body['generationConfig']['speechConfig']['multiSpeakerVoiceConfig']['speakerVoiceConfigs']
+        self.assertEqual([(v['speaker'], v['voiceConfig']['prebuiltVoiceConfig']['voiceName']) for v in voices],
+                         [('Speaker1', 'Callirrhoe'), ('Speaker2', 'Puck')])
+        self.assertEqual(body['contents'][0]['parts'][0]['text'].split('TRANSCRIPT:\n', 1)[1], transcript)
+        args.voice, args.voice2 = 'Kore', 'Charon'
+        voices = tts.request_body(transcript, args)['generationConfig']['speechConfig']['multiSpeakerVoiceConfig']['speakerVoiceConfigs']
+        self.assertEqual([v['voiceConfig']['prebuiltVoiceConfig']['voiceName'] for v in voices], ['Kore', 'Charon'])
+        args.two_speakers = False
+        single = tts.request_body('A single narrator.', args)
+        self.assertEqual(single['generationConfig']['speechConfig'],
+                         {'voiceConfig': {'prebuiltVoiceConfig': {'voiceName': 'Kore'}}})
+
     @staticmethod
     def http_error(code=429, details=None, headers=None):
         body = {'error': {'message': 'private server message', 'details': details or []}}

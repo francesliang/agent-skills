@@ -20,6 +20,8 @@ import wave
 MODEL = 'gemini-2.5-flash-preview-tts'
 RATE = 24000
 audio_file_name = "podcast.m4a"
+DEFAULT_VOICE = 'Callirrhoe'
+DEFAULT_VOICE2 = 'Puck'
 
 
 def clean_markdown(text):
@@ -99,10 +101,17 @@ def request_body(text, args):
             {'speaker': 'Speaker1', 'voiceConfig': voice(args.voice)},
             {'speaker': 'Speaker2', 'voiceConfig': voice(args.voice2)},
         ]}}
+    delivery = 'Use a natural, clear news-podcast delivery. '
+    if args.two_speakers:
+        delivery += ('Speaker1 is Maya: easy-going, warm and curious, with relaxed pacing and clear explanations. '
+                     'Speaker2 is Jax: funny, playful and quick-witted, with conversational energy and natural comic timing for the occasional scripted joke. '
+                     'Keep both hosts grounded and engaged; use a measured, respectful tone for serious stories. '
+                     'Express these personalities through delivery only; do not invent jokes, laughter, '
+                     'banter, introductions or any other words. ')
     prompt = ('Read the following transcript aloud exactly as written, in English. '
               'Do not summarise, add commentary, introduce the transcript, or omit sentences. '
               'Speaker labels identify voices and must not be spoken. '
-              'Use a natural, clear news-podcast delivery.\n\nTRANSCRIPT:\n' + text)
+              + delivery + '\n\nTRANSCRIPT:\n' + text)
     return {'contents': [{'parts': [{'text': prompt}]}], 'generationConfig': {
         'responseModalities': ['AUDIO'], 'speechConfig': speech}}
 
@@ -224,8 +233,8 @@ def main():
     parser.add_argument('script', type=Path)
     parser.add_argument('-o', '--output', type=Path, help=f'Output path named {audio_file_name} (default: next to input)')
     parser.add_argument('--two-speakers', action='store_true', help='Use Speaker1:/Speaker2: labels, or alternate paragraphs')
-    parser.add_argument('--voice', default='Kore', help='Narrator / Speaker1 voice (default: Kore)')
-    parser.add_argument('--voice2', default='Puck', help='Speaker2 voice (default: Puck)')
+    parser.add_argument('--voice', default=DEFAULT_VOICE, help=f'Narrator / Maya / Speaker1 voice (default: {DEFAULT_VOICE})')
+    parser.add_argument('--voice2', default=DEFAULT_VOICE2, help=f'Jax / Speaker2 voice (default: {DEFAULT_VOICE2})')
     parser.add_argument('--chunk-chars', type=int, default=2500)
     parser.add_argument('--pause', type=float, default=15, help='Seconds between uncached requests')
     parser.add_argument('--retries', type=int, default=6, help='Retries per section after HTTP 429 or transient server errors (default: 6)')
